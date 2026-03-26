@@ -55,9 +55,14 @@ let selectedDateStr = null;
 // Signed-in user's UID — set by the auth observer
 let currentUserId = null;
 
+// New State for stats/filters
+let activeFilter = 'all'; // 'all', 'O', 'W', 'L'
+let currentView = 'calendar'; // 'calendar', 'list', 'cards'
+
 // ── ❹ DOM references ─────────────────────────────────────────
 const monthLabel = document.getElementById('month-label');
 const daysGrid = document.getElementById('days-grid');
+const weekdaysRow = document.querySelector('.weekdays');
 const prevBtn = document.getElementById('prev-month');
 const nextBtn = document.getElementById('next-month');
 const modalOverlay = document.getElementById('modal-overlay');
@@ -69,6 +74,23 @@ const leaveBtnEl = document.getElementById('btn-leave');
 const clearBtnEl = document.getElementById('btn-clear');
 const loadingEl = document.getElementById('loading');
 const toastEl = document.getElementById('toast');
+
+// Stats and Filters
+const statOfficeEl = document.getElementById('stat-office');
+const statWfhEl = document.getElementById('stat-wfh');
+const statLeaveEl = document.getElementById('stat-leave');
+const filterChips = document.querySelectorAll('.filter-chip');
+const viewToggle = document.getElementById('view-toggle');
+const btnViewCalendar = document.getElementById('btn-view-calendar');
+const btnViewList = document.getElementById('btn-view-list');
+const btnViewCards = document.getElementById('btn-view-cards');
+const listViewEl = document.getElementById('list-view');
+const listBodyEl = document.getElementById('list-body');
+const listEmptyEl = document.getElementById('list-empty');
+const cardsViewEl = document.getElementById('cards-view');
+const cardsGridEl = document.getElementById('cards-grid');
+const cardsEmptyEl = document.getElementById('cards-empty');
+const daysContainer = document.querySelector('.days-container');
 // Auth UI
 const loginOverlay = document.getElementById('login-overlay');
 const googleSignIn = document.getElementById('btn-google-signin');
@@ -103,8 +125,37 @@ async function fetchAllAttendance() {
     console.error('Firestore fetch error:', err);
   } finally {
     loadingEl.style.display = 'none';
-    renderCalendar();
+    refreshUI();
   }
+}
+
+// ── ❻ Master UI Refresh ──────────────────────────────────────
+function refreshUI() {
+  updateStats();
+  if (currentView === 'calendar') {
+    renderCalendar();
+  } else if (currentView === 'list') {
+    renderListView();
+  } else {
+    renderCardsView();
+  }
+}
+
+function updateStats() {
+  let counts = { O: 0, W: 0, L: 0 };
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = formatDate(currentYear, currentMonth, d);
+    const status = attendanceCache[dateStr];
+    if (status && counts[status] !== undefined) {
+      counts[status]++;
+    }
+  }
+
+  statOfficeEl.textContent = counts.O;
+  statWfhEl.textContent = counts.W;
+  statLeaveEl.textContent = counts.L;
 }
 
 // ── ❻ Save a single attendance entry to Firestore ────────────
@@ -125,22 +176,22 @@ async function saveAttendance(dateStr, status) {
             .collection('dates').doc(dateStr).set({ s: status });
     attendanceCache[dateStr] = status;          // update local cache
     showToast('✓ Saved ' + statusLabel(status));
-    renderCalendar();
+    refreshUI();
   } catch (err) {
     // Firestore failed — still update locally so the UI responds
     attendanceCache[dateStr] = status;
     showToast('✓ ' + statusLabel(status) + ' (saved locally — check Firebase config)');
     console.error('Firestore save error:', err);
-    renderCalendar();
+    refreshUI();
   }
 }
 
-// ── ❼ Delete an attendance entry from Firestore ──────────────
+// ── ❽ Delete an attendance entry from Firestore ──────────────
 async function clearAttendance(dateStr) {
   if (!db) {
     delete attendanceCache[dateStr];
     showToast('Entry cleared.');
-    renderCalendar();
+    refreshUI();
     return;
   }
   try {
@@ -149,13 +200,13 @@ async function clearAttendance(dateStr) {
             .collection('dates').doc(dateStr).delete();
     delete attendanceCache[dateStr];            // remove from cache
     showToast('Entry cleared.');
-    renderCalendar();
+    refreshUI();
   } catch (err) {
     // Firestore failed — still clear locally so the UI responds
     delete attendanceCache[dateStr];
     showToast('Entry cleared (locally — check Firebase config).');
     console.error('Firestore delete error:', err);
-    renderCalendar();
+    refreshUI();
   }
 }
 
@@ -168,6 +219,12 @@ const today = new Date();
 const todayStr = formatDate(today.getFullYear(), today.getMonth(), today.getDate());
 
 function renderCalendar() {
+  // Update UI Visibility
+  weekdaysRow.style.display = 'grid';
+  daysContainer.style.display = 'block';
+  listViewEl.style.display = 'none';
+  cardsViewEl.style.display = 'none';
+
   // Update header label
   monthLabel.textContent = `${MONTHS[currentMonth]} ${currentYear}`;
   daysGrid.innerHTML = '';
@@ -204,6 +261,14 @@ function renderCalendar() {
       const dot = document.createElement('span');
       dot.className = 'status-dot';
       cell.appendChild(dot);
+      
+      // Filter logic: dim if not matching active filter
+      if (activeFilter !== 'all' && status !== activeFilter) {
+        cell.classList.add('dimmed');
+      }
+    } else if (activeFilter !== 'all') {
+      // If a filter is active, empty days are also dimmed
+      cell.classList.add('dimmed');
     }
 
     cell.addEventListener('click', () => openModal(dateStr, d));
@@ -213,6 +278,92 @@ function renderCalendar() {
 
     daysGrid.appendChild(cell);
   }
+}
+
+// ── ❿ List View Rendering ─────────────────────────────────────
+function renderListView() {
+  weekdaysRow.style.display = 'none';
+  daysContainer.style.display = 'none';
+  listViewEl.style.display = 'block';
+  cardsViewEl.style.display = 'none';
+  
+  monthLabel.textContent = `${MONTHS[currentMonth]} ${currentYear}`;
+  listBodyEl.innerHTML = '';
+  
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const entries = [];
+  
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = formatDate(currentYear, currentMonth, d);
+    const status = attendanceCache[dateStr];
+    if (status) {
+      entries.push({ day: d, dateStr, status });
+    }
+  }
+  
+  if (entries.length === 0) {
+    listEmptyEl.style.display = 'block';
+    return;
+  }
+  
+  listEmptyEl.style.display = 'none';
+  entries.forEach(entry => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${entry.day} ${MONTHS[currentMonth].substring(0,3)}</td>
+      <td>
+        <span class="status-badge ${entry.status}">
+          ${entry.status === 'O' ? '🏢 Office' : entry.status === 'W' ? '🏠 WFH' : '🌴 Leave'}
+        </span>
+      </td>
+    `;
+    listBodyEl.appendChild(row);
+  });
+}
+
+// ── ⓫ Cards View Rendering ────────────────────────────────────
+function renderCardsView() {
+  weekdaysRow.style.display = 'none';
+  daysContainer.style.display = 'none';
+  listViewEl.style.display = 'none';
+  cardsViewEl.style.display = 'block';
+  
+  monthLabel.textContent = `${MONTHS[currentMonth]} ${currentYear}`;
+  cardsGridEl.innerHTML = '';
+  
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const entries = [];
+  
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = formatDate(currentYear, currentMonth, d);
+    const status = attendanceCache[dateStr];
+    if (status) {
+      entries.push({ day: d, dateStr, status });
+    }
+  }
+  
+  if (entries.length === 0) {
+    cardsEmptyEl.style.display = 'block';
+    return;
+  }
+  
+  cardsEmptyEl.style.display = 'none';
+  entries.forEach(entry => {
+    const card = document.createElement('div');
+    card.className = `status-card ${entry.status}`;
+    
+    let icon = entry.status === 'O' ? '🏢' : entry.status === 'W' ? '🏠' : '🌴';
+    let label = entry.status === 'O' ? 'Office' : entry.status === 'W' ? 'WFH' : 'Leave';
+    
+    card.innerHTML = `
+      <div class="status-icon">${icon}</div>
+      <div class="card-date">${entry.day} ${MONTHS[currentMonth]}</div>
+      <div class="card-status-text">${label}</div>
+    `;
+    
+    card.addEventListener('click', () => openModal(entry.dateStr, entry.day));
+    cardsGridEl.appendChild(card);
+  });
 }
 
 // ── ❾ Modal helpers ──────────────────────────────────────────
@@ -235,13 +386,13 @@ function closeModalFn() {
 prevBtn.addEventListener('click', () => {
   currentMonth--;
   if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-  renderCalendar();
+  refreshUI();
 });
 
 nextBtn.addEventListener('click', () => {
   currentMonth++;
   if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-  renderCalendar();
+  refreshUI();
 });
 
 // Status button clicks — save to Firestore then close modal
@@ -280,6 +431,48 @@ closeModal.addEventListener('click', closeModalFn);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModalFn();
 });
+
+// Filter chip clicks
+filterChips.forEach(chip => {
+  chip.addEventListener('click', () => {
+    filterChips.forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeFilter = chip.getAttribute('data-filter');
+    renderCalendar(); // Filters only apply to calendar view
+    
+    // Auto-switch to calendar if user was in list view and clicks a filter
+    if (currentView === 'list') {
+      currentView = 'calendar';
+      btnViewList.classList.remove('active');
+      btnViewCalendar.classList.add('active');
+      refreshUI();
+    }
+  });
+});
+
+// View toggle clicks
+btnViewCalendar.addEventListener('click', () => {
+  setView('calendar');
+});
+
+btnViewList.addEventListener('click', () => {
+  setView('list');
+});
+
+btnViewCards.addEventListener('click', () => {
+  setView('cards');
+});
+
+function setView(view) {
+  currentView = view;
+  
+  // Update buttons
+  btnViewCalendar.classList.toggle('active', view === 'calendar');
+  btnViewList.classList.toggle('active', view === 'list');
+  btnViewCards.classList.toggle('active', view === 'cards');
+  
+  refreshUI();
+}
 
 // ── ⓫ Utility functions ──────────────────────────────────────
 

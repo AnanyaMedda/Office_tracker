@@ -64,9 +64,33 @@
 
     <!-- Month Navigation -->
     <div class="month-nav">
-      <button id="prev-month" aria-label="Previous month">&#8249;</button>
-      <span id="month-label">Loading…</span>
-      <button id="next-month" aria-label="Next month">&#8250;</button>
+      <div class="nav-controls">
+        <button id="prev-month" aria-label="Previous month">&#8249;</button>
+        <span id="month-label">Loading…</span>
+        <button id="next-month" aria-label="Next month">&#8250;</button>
+      </div>
+      
+      <!-- View Toggle -->
+      <div class="view-toggle" id="view-toggle">
+        <button id="btn-view-calendar" class="view-btn active" title="Calendar View">📅</button>
+        <button id="btn-view-list" class="view-btn" title="List View">📋</button>
+        <button id="btn-view-cards" class="view-btn" title="Designer Cards View">💳</button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat-pill office">🏢 <span id="stat-office">0</span></div>
+      <div class="stat-pill wfh">🏠 <span id="stat-wfh">0</span></div>
+      <div class="stat-pill leave">🌴 <span id="stat-leave">0</span></div>
+    </div>
+
+    <!-- Filter Chips -->
+    <div class="filter-bar" id="filter-bar">
+      <button class="filter-chip active" data-filter="all">All</button>
+      <button class="filter-chip" data-filter="O">Office</button>
+      <button class="filter-chip" data-filter="W">WFH</button>
+      <button class="filter-chip" data-filter="L">Leave</button>
     </div>
 
     <!-- Day-of-week headers -->
@@ -81,7 +105,29 @@
     </div>
 
     <!-- Day cells are injected here by script.js -->
-    <div class="days-grid" id="days-grid" role="grid"></div>
+    <div class="days-container">
+      <div class="days-grid" id="days-grid" role="grid"></div>
+    </div>
+
+    <!-- List View (Table) — Hidden by default -->
+    <div id="list-view" class="list-view" style="display: none;">
+      <table id="list-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="list-body"></tbody>
+      </table>
+      <div id="list-empty" class="list-empty" style="display: none;">No entries for this month.</div>
+    </div>
+
+    <!-- Cards View (Designer) — Hidden by default -->
+    <div id="cards-view" class="cards-view" style="display: none;">
+      <div id="cards-grid" class="cards-grid"></div>
+      <div id="cards-empty" class="list-empty" style="display: none;">No entries for this month.</div>
+    </div>
 
     <!-- Legend -->
     <div class="legend" aria-label="Status legend">
