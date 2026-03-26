@@ -52,6 +52,9 @@ let attendanceCache = {};
 // Currently selected date string (for the modal)
 let selectedDateStr = null;
 
+// Signed-in user's UID — set by the auth observer
+let currentUserId = null;
+
 // ── ❹ DOM references ─────────────────────────────────────────
 const monthLabel = document.getElementById('month-label');
 const daysGrid = document.getElementById('days-grid');
@@ -87,8 +90,9 @@ async function fetchAllAttendance() {
   }
   try {
     loadingEl.style.display = 'block';
-    // getDocs returns all documents in the collection
-    const snapshot = await db.collection('attendance').get();
+    // Path: attendance/{userId} — subcollection of dates
+    const snapshot = await db.collection('attendance').doc(currentUserId)
+                              .collection('dates').get();
     snapshot.forEach(doc => {
       // doc.id  = "YYYY-MM-DD"
       // doc.data() = { s: "O" | "W" | "L" }
@@ -116,8 +120,9 @@ async function saveAttendance(dateStr, status) {
     return;
   }
   try {
-    // Firestore path: attendance / "YYYY-MM-DD"
-    await db.collection('attendance').doc(dateStr).set({ s: status });
+    // Path: attendance/{userId}/dates/{date}
+    await db.collection('attendance').doc(currentUserId)
+            .collection('dates').doc(dateStr).set({ s: status });
     attendanceCache[dateStr] = status;          // update local cache
     showToast('✓ Saved ' + statusLabel(status));
     renderCalendar();
@@ -139,7 +144,9 @@ async function clearAttendance(dateStr) {
     return;
   }
   try {
-    await db.collection('attendance').doc(dateStr).delete();
+    // Path: attendance/{userId}/dates/{date}
+    await db.collection('attendance').doc(currentUserId)
+            .collection('dates').doc(dateStr).delete();
     delete attendanceCache[dateStr];            // remove from cache
     showToast('Entry cleared.');
     renderCalendar();
@@ -330,6 +337,7 @@ if (auth) {
       userAvatarEl.src = user.photoURL || '';
       userAvatarEl.style.display = user.photoURL ? 'block' : 'none';
       userNameEl.textContent = user.displayName || user.email;
+      currentUserId = user.uid;      // store UID for all Firestore paths
       attendanceCache = {};          // clear any stale cache
       fetchAllAttendance();
     } else {
