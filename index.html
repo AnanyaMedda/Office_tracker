@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Track your office attendance — Office, Work From Home, or Leave — with a beautiful calendar backed by Firebase Firestore." />
+  <title>Office Attendance Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!--
+    Firebase SDK (v9 compat build — works as a global "firebase" object,
+    best suited for simple single-page apps without a build step).
+
+    DATA MODEL REMINDER:
+      Collection : "attendance"
+      Document ID: "YYYY-MM-DD"
+      Field      : { s: "O" | "W" | "L" }
+  -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+  <!-- ── Login overlay (visible when signed-out) ── -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-card">
+      <div class="login-icon">📅</div>
+      <h1>Office Attendance Tracker</h1>
+      <p>Sign in with your Google account to track your attendance.</p>
+      <button id="btn-google-signin" class="google-signin-btn">
+        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <p class="login-note" id="login-error" style="display:none;">⚠️ Sign-in failed. Make sure Google Auth is enabled in Firebase Console.</p>
+    </div>
+  </div>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="header-top">
+      <h1>Office Attendance Tracker</h1>
+      <div class="user-info" id="user-info" style="display:none;">
+        <img id="user-avatar" src="" alt="Profile" class="user-avatar" />
+        <span id="user-name"></span>
+        <button id="btn-signout" class="signout-btn">Sign out</button>
+      </div>
+    </div>
+    <p>Click any date to log your status for that day.</p>
+  </header>
+
+  <!-- ── Loading spinner (shown while fetching Firestore data) ── -->
+  <div id="loading" style="display:none;">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- ── Calendar Card ── -->
+  <div class="calendar-card" role="main" aria-label="Attendance Calendar">
+
+    <!-- Month Navigation -->
+    <div class="month-nav">
+      <button id="prev-month" aria-label="Previous month">&#8249;</button>
+      <span id="month-label">Loading…</span>
+      <button id="next-month" aria-label="Next month">&#8250;</button>
+    </div>
+
+    <!-- Day-of-week headers -->
+    <div class="weekdays" role="row">
+      <div class="weekday">Sun</div>
+      <div class="weekday">Mon</div>
+      <div class="weekday">Tue</div>
+      <div class="weekday">Wed</div>
+      <div class="weekday">Thu</div>
+      <div class="weekday">Fri</div>
+      <div class="weekday">Sat</div>
+    </div>
+
+    <!-- Day cells are injected here by script.js -->
+    <div class="days-grid" id="days-grid" role="grid"></div>
+
+    <!-- Legend -->
+    <div class="legend" aria-label="Status legend">
+      <div class="legend-item">
+        <div class="legend-dot office"></div> Office
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot wfh"></div> Work From Home
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot leave"></div> Leave
+      </div>
+    </div>
+  </div><!-- /.calendar-card -->
+
+  <!-- ── Status Selection Modal ── -->
+  <!--
+    The modal appears when the user clicks a date cell.
+    Selecting a button calls saveAttendance(date, status) in script.js
+    which writes { s: <code> } to the Firestore "attendance" collection.
+  -->
+  <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-date">
+    <div class="modal">
+      <button class="modal-close" id="close-modal" aria-label="Close">&times;</button>
+      <h2>Set attendance for</h2>
+      <div id="modal-date"></div>
+
+      <div class="status-buttons">
+        <!-- Each button stores a short code: O / W / L -->
+        <button id="btn-office" class="status-btn office-btn">🏢 Office</button>
+        <button id="btn-wfh"    class="status-btn wfh-btn"   >🏠 WFH</button>
+        <button id="btn-leave"  class="status-btn leave-btn" >🌴 Leave</button>
+      </div>
+
+      <!-- Clear / remove the entry for this date -->
+      <button id="btn-clear" class="clear-btn" style="display:none;">Clear entry</button>
+    </div>
+  </div>
+
+  <!-- ── Toast notification ── -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Application logic -->
+  <script src="script.js"></script>
+</body>
+</html>
