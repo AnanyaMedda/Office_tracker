@@ -15,20 +15,9 @@
 // ============================================================
 
 // ── ❶ Firebase Configuration ────────────────────────────────
-// Replace the values below with your own Firebase project config.
-// You can find these in the Firebase Console:
-//   Project Settings → Your apps → Firebase SDK snippet → Config
+// The configuration is now loaded from 'config.js'.
+// Make sure 'config.js' is included in your index.html BEFORE script.js.
 // ─────────────────────────────────────────────────────────────
-// ⚠️  IMPORTANT: Update the values below before deploying!
-// ─────────────────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyApW_7EdKZtGWrv1yLvwraiSFJUkz9svhg",
-  authDomain: "office-attendance-tracke-3f3db.firebaseapp.com",
-  projectId: "office-attendance-tracke-3f3db",
-  storageBucket: "office-attendance-tracke-3f3db.firebasestorage.app",
-  messagingSenderId: "74594316196",
-  appId: "1:74594316196:web:02f2aaaa343469a76e9b31"
-};
 
 
 // ── ❷ Initialise Firebase, Firestore & Auth ────────────────
