@@ -1,1 +1,1 @@
-config.js
+# config.js is now allowed so the live site can connect to Firebase
