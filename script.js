@@ -24,11 +24,18 @@
 let db = null;
 let auth = null;
 try {
-  const app = firebase.initializeApp(firebaseConfig);
+  const config = typeof firebaseConfig !== 'undefined' ? firebaseConfig : window.firebaseConfig;
+  const app = firebase.initializeApp(config);
   db = firebase.firestore();
   auth = firebase.auth();
 } catch (e) {
-  console.warn('Firebase init failed — running in offline/demo mode.', e);
+  console.error('Firebase init failed:', e);
+  // Optional: show the error in the toast for better debugging
+  if (typeof firebase === 'undefined') {
+    console.warn('Firebase SDK is not loaded. Check your internet connection or CDN links.');
+  } else if (typeof firebaseConfig === 'undefined') {
+    console.warn('firebaseConfig is not defined. Check if config.js is loaded correctly.');
+  }
 }
 
 // ── ❸ State ─────────────────────────────────────────────────
@@ -104,11 +111,24 @@ async function fetchAllAttendance() {
     // Path: attendance/{userId} — subcollection of dates
     const snapshot = await db.collection('attendance').doc(currentUserId)
                               .collection('dates').get();
-    snapshot.forEach(doc => {
-      // doc.id  = "YYYY-MM-DD"
-      // doc.data() = { s: "O" | "W" | "L" }
-      attendanceCache[doc.id] = doc.data().s;
-    });
+    
+    if (!snapshot.empty) {
+      snapshot.forEach(doc => {
+        attendanceCache[doc.id] = doc.data().s;
+      });
+    } else {
+      // ── LEGACY FALLBACK ──
+      // If no isolated user data exists, check if there's any data in the 
+      // root "attendance" collection (from before isolation was added).
+      const legacySnapshot = await db.collection('attendance').get();
+      legacySnapshot.forEach(doc => {
+        // Only include if the doc ID looks like a date (YYYY-MM-DD)
+        // and doesn't conflict with any uid-based docs
+        if (doc.id.length === 10 && doc.id.includes('-') && doc.data().s) {
+          attendanceCache[doc.id] = doc.data().s;
+        }
+      });
+    }
   } catch (err) {
     showToast('⚠️  Could not load data. Check Firebase config.');
     console.error('Firestore fetch error:', err);
