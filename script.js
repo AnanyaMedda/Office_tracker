@@ -107,33 +107,36 @@ async function fetchAllAttendance() {
     return;
   }
   try {
-    loadingEl.style.display = 'block';
-    // ── ❶ Load Legacy Fallback ──
-    // Check if there's any data in the root "attendance" collection 
-    // (from before isolation was added). 
+  loadingEl.style.display = 'block';
+
+  // ── ❶ Load Legacy Fallback (Safe Block) ──
+  try {
     const legacySnapshot = await db.collection('attendance').get();
     legacySnapshot.forEach(doc => {
-      // Only include if the doc ID looks like a date (YYYY-MM-DD)
       if (doc.id.length === 10 && doc.id.includes('-') && doc.data().s) {
         attendanceCache[doc.id] = doc.data().s;
       }
     });
+    console.log('✅ Legacy data loaded.');
+  } catch (err) {
+    console.warn('ℹ️ Legacy folder skipped (usually a permission setting).', err);
+  }
 
-    // ── ❷ Load User-Isolated Data ──
-    // Path: attendance/{userId}/dates/{date}
-    // This will overwrite legacy data for the same date if both exist.
+  // ── ❷ Load User-Isolated Data (Safe Block) ──
+  try {
     const snapshot = await db.collection('attendance').doc(currentUserId)
                               .collection('dates').get();
     snapshot.forEach(doc => {
       attendanceCache[doc.id] = doc.data().s;
     });
+    console.log('✅ User-isolated data loaded.');
   } catch (err) {
-    showToast('⚠️  Could not load data. Check Firebase config.');
-    console.error('Firestore fetch error:', err);
-  } finally {
-    loadingEl.style.display = 'none';
-    refreshUI();
+    console.error('❌ User data failed to load:', err);
+    showToast('⚠️ Could not load your personal data. Check Firebase rules.');
   }
+  
+  loadingEl.style.display = 'none';
+  refreshUI();
 }
 
 // ── ❻ Master UI Refresh ──────────────────────────────────────
