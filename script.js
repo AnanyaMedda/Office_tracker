@@ -108,27 +108,25 @@ async function fetchAllAttendance() {
   }
   try {
     loadingEl.style.display = 'block';
-    // Path: attendance/{userId} — subcollection of dates
+    // ── ❶ Load Legacy Fallback ──
+    // Check if there's any data in the root "attendance" collection 
+    // (from before isolation was added). 
+    const legacySnapshot = await db.collection('attendance').get();
+    legacySnapshot.forEach(doc => {
+      // Only include if the doc ID looks like a date (YYYY-MM-DD)
+      if (doc.id.length === 10 && doc.id.includes('-') && doc.data().s) {
+        attendanceCache[doc.id] = doc.data().s;
+      }
+    });
+
+    // ── ❷ Load User-Isolated Data ──
+    // Path: attendance/{userId}/dates/{date}
+    // This will overwrite legacy data for the same date if both exist.
     const snapshot = await db.collection('attendance').doc(currentUserId)
                               .collection('dates').get();
-    
-    if (!snapshot.empty) {
-      snapshot.forEach(doc => {
-        attendanceCache[doc.id] = doc.data().s;
-      });
-    } else {
-      // ── LEGACY FALLBACK ──
-      // If no isolated user data exists, check if there's any data in the 
-      // root "attendance" collection (from before isolation was added).
-      const legacySnapshot = await db.collection('attendance').get();
-      legacySnapshot.forEach(doc => {
-        // Only include if the doc ID looks like a date (YYYY-MM-DD)
-        // and doesn't conflict with any uid-based docs
-        if (doc.id.length === 10 && doc.id.includes('-') && doc.data().s) {
-          attendanceCache[doc.id] = doc.data().s;
-        }
-      });
-    }
+    snapshot.forEach(doc => {
+      attendanceCache[doc.id] = doc.data().s;
+    });
   } catch (err) {
     showToast('⚠️  Could not load data. Check Firebase config.');
     console.error('Firestore fetch error:', err);
