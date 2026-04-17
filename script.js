@@ -106,7 +106,6 @@ async function fetchAllAttendance() {
     renderCalendar();
     return;
   }
-  try {
   loadingEl.style.display = 'block';
 
   // ── ❶ Load Legacy Fallback (Safe Block) ──
